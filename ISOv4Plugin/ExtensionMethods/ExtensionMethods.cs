@@ -24,36 +24,6 @@ namespace AgGateway.ADAPT.ISOv4Plugin.ExtensionMethods
     public static class ExtensionMethods
     {
         private static readonly Regex IsoIdPattern = new Regex("^[A-Z]{3,4}-?[0-9]+$", RegexOptions.Compiled);
-        private static readonly Regex DigitsOnly = new Regex(@"[^\d]", RegexOptions.Compiled);
-
-        public static TValue FindByADAPTId<TKey, TValue>(this Dictionary<TKey, TValue> items, TKey id) where TValue : class
-        {
-            if (items == null || items.Count == 0 || id == null)
-                return null;
-
-            TValue value;
-            if (items.TryGetValue(id, out value))
-                return value;
-
-            return null;
-        }
-
-        public static Nullable<TValue> FindByISOId<TKey, TValue>(this Dictionary<TKey, Nullable<TValue>> items, TKey id) where TValue : struct
-        {
-            if (items == null || items.Count == 0 || id == null)
-            { 
-                return null;
-            }
-
-            if (items.ContainsKey(id))
-            {
-                return items[id];
-            }
-            else
-            {
-                return null;
-            }
-        }
 
         public static string WithTaskDataPath(this string dataPath)
         {
@@ -77,25 +47,15 @@ namespace AgGateway.ADAPT.ISOv4Plugin.ExtensionMethods
             return allSections;
         }
 
-        public static string FindIsoId(this CompoundIdentifier adaptId)
+        public static string FindIsoId(this CompoundIdentifier adaptId, string prefixFilter = null)
         {
             var stringIds = adaptId.UniqueIds.Where(id => id.Id != null &&
                 id.Source == UniqueIdMapper.IsoSource &&
                 id.IdType == IdTypeEnum.String).ToList();
 
-            var isoId = stringIds.FirstOrDefault(s => IsoIdPattern.IsMatch(s.Id));
+            var isoId = stringIds.FirstOrDefault(s => IsoIdPattern.IsMatch(s.Id) && (prefixFilter == null || s.Id.StartsWith(prefixFilter)));
 
             return isoId != null ? isoId.Id : null;
-        }
-
-        public static int FindIntIsoId(this CompoundIdentifier adaptId)
-        {
-            var isoId = FindIsoId(adaptId);
-
-            if (isoId == null)
-                return -1;
-
-            return int.Parse(DigitsOnly.Replace(isoId, ""));
         }
 
         public static int AsInt32DDI(this string ddiHexString)
@@ -116,7 +76,8 @@ namespace AgGateway.ADAPT.ISOv4Plugin.ExtensionMethods
         /// <param name="ddi"></param>
         /// <param name="mapper"></param>
         /// <returns></returns>
-        public static NumericRepresentationValue AsNumericRepresentationValue(this long n, int ddi, RepresentationMapper mapper, UnitOfMeasure userUnitOfMeasure = null) 
+        /// 
+        public static NumericRepresentationValue AsNumericRepresentationValue(this int n, int ddi, RepresentationMapper mapper, UnitOfMeasure userUnitOfMeasure = null)
         {
             //RepresentationValue
             NumericRepresentationValue returnValue = new ApplicationDataModel.Representations.NumericRepresentationValue();
@@ -150,17 +111,17 @@ namespace AgGateway.ADAPT.ISOv4Plugin.ExtensionMethods
         /// <param name="ddiHexString"></param>
         /// <param name="mapper"></param>
         /// <returns></returns>
-        public static NumericRepresentationValue AsNumericRepresentationValue(this long n, string ddiHexString, RepresentationMapper mapper, UnitOfMeasure userUnitOfMeasure = null)
+        public static NumericRepresentationValue AsNumericRepresentationValue(this int n, string ddiHexString, RepresentationMapper mapper, UnitOfMeasure userUnitOfMeasure = null)
         {
             return n.AsNumericRepresentationValue(ddiHexString.AsInt32DDI(), mapper, userUnitOfMeasure);
         }
 
         public static NumericRepresentationValue AsNumericRepresentationValue(this ISOProcessDataVariable pdv, RepresentationMapper mapper, ISO11783_TaskData taskData)
         {
-            return pdv.ProcessDataValue.AsNumericRepresentationValue(pdv.ProcessDataDDI, mapper, pdv.ToUserAdaptUnit(mapper, taskData));
+            return pdv.ProcessDataValue.AsNumericRepresentationValue(pdv.ProcessDataDDI, mapper, pdv.ToDisplayUnit(mapper, taskData));
         }
 
-        public static NumericRepresentationValue AsNumericRepresentationValue(this long n, string uomCode)
+        public static NumericRepresentationValue AsNumericRepresentationValue(this int n, string uomCode)
         {
             NumericRepresentationValue returnValue = new NumericRepresentationValue();
             UnitOfMeasure uom = AgGateway.ADAPT.Representation.UnitSystem.UnitSystemManager.GetUnitOfMeasure(uomCode);
@@ -168,36 +129,31 @@ namespace AgGateway.ADAPT.ISOv4Plugin.ExtensionMethods
             return returnValue;
         }
 
-        public static UnitOfMeasure ToAdaptUnit(this ISOProcessDataVariable pdv, RepresentationMapper mapper, ISO11783_TaskData taskData)
+        public static UnitOfMeasure ToDisplayUnit(this ISOProcessDataVariable pdv, RepresentationMapper mapper, ISO11783_TaskData taskData)
         {
-            ISOUnit isoUnit = UnitFactory.Instance.GetUnitByDDI(pdv.ProcessDataDDI.AsInt32DDI());
-            if (isoUnit != null)
-            {
-                return isoUnit.ToAdaptUnit();  //Unit based on DDI
-            }
-            else 
-            {
-                return pdv.ToUserAdaptUnit(mapper, taskData); //Presentation Unit
-            }
-        }
-
-        public static ISOUnit ToISOUnit(this ISOProcessDataVariable pdv, RepresentationMapper mapper, ISO11783_TaskData taskData)
-        {
+            ISOUnit userUnit = null;
             if (!string.IsNullOrEmpty(pdv.ValuePresentationIdRef))
             {
                 ISOValuePresentation vpn = taskData.ChildElements.OfType<ISOValuePresentation>().FirstOrDefault(v => v.ValuePresentationID == pdv.ValuePresentationIdRef);
                 if (vpn != null)
                 {
-                    return new ISOUnit(vpn);
+                    userUnit = new ISOUnit(vpn);
                 }
             }
-            return null;
-        }
+            if (userUnit != null)
+            {
 
-        public static UnitOfMeasure ToUserAdaptUnit(this ISOProcessDataVariable pdv, RepresentationMapper mapper, ISO11783_TaskData taskData)
-        {
-            ISOUnit userUnit = pdv.ToISOUnit(mapper, taskData);
-            //TODO map to an Adapt Unit based on code; non-matching codes will error.
+                UnitOfMeasure adaptUnit = null;
+                try
+                {
+                    adaptUnit = userUnit.ToAdaptUnit();
+                }
+                catch
+                {
+                    //Suppressing this as a non-critical exception
+                }
+                return adaptUnit;
+            }
             return null;
         }
 
@@ -205,9 +161,8 @@ namespace AgGateway.ADAPT.ISOv4Plugin.ExtensionMethods
         {
             if (isoUnit == null)
                 return null;
-            var adaptUnit = AgGateway.ADAPT.Representation.UnitSystem.UnitSystemManager.GetUnitOfMeasure(isoUnit.Code);
 
-            return adaptUnit;
+            return AgGateway.ADAPT.Representation.UnitSystem.UnitSystemManager.GetUnitOfMeasure(isoUnit.Code);
         }
 
         public static double ConvertFromIsoUnit(this ISOUnit unit, double value)
@@ -216,15 +171,6 @@ namespace AgGateway.ADAPT.ISOv4Plugin.ExtensionMethods
                 return value;
 
             double newValue = (value + unit.Offset) * unit.Scale;
-            return newValue;
-        }
-
-        public static double ConvertFromIsoUnit(this ISOUnit unit, long value)
-        {
-            if (unit == null)
-                return (double)value;
-
-            double newValue = ((double)value + unit.Offset) * unit.Scale;
             return newValue;
         }
 
@@ -238,23 +184,23 @@ namespace AgGateway.ADAPT.ISOv4Plugin.ExtensionMethods
         }
 
         /// <summary>
-        /// Converts an ADAPT NumericRepresentation value with an included Representation mapped to a DDI to the appropriate long value for ISO
+        /// Converts an ADAPT NumericRepresentation value with an included Representation mapped to a DDI to the appropriate int value for ISO
         /// </summary>
         /// <param name="value"></param>
         /// <param name="mapper"></param>
         /// <returns></returns>
-        public static long AsLongViaMappedDDI(this NumericRepresentationValue value, RepresentationMapper mapper)
+        public static int AsIntViaMappedDDI(this NumericRepresentationValue value, RepresentationMapper mapper)
         {
             int? ddi = mapper.Map(value.Representation);
             if (ddi.HasValue)
             {
                 ISOUnit unit = UnitFactory.Instance.GetUnitByDDI(ddi.Value);
-                return (long)unit.ConvertToIsoUnit(value.Value.Value);
+                return (int) unit.ConvertToIsoUnit(value.Value.Value);
             }
-            else if (value.Representation.CodeSource == RepresentationCodeSourceEnum.ISO11783_DDI)
+            else if (value.Representation != null && value.Representation.CodeSource == RepresentationCodeSourceEnum.ISO11783_DDI)
             {
                 //No need to convert if the value is natively a DDI
-                return (long)value.Value.Value;
+                return (int) value.Value.Value;
             }
             return 0;
         }
@@ -287,9 +233,9 @@ namespace AgGateway.ADAPT.ISOv4Plugin.ExtensionMethods
             }
         }
 
-        public static long AsConvertedLong(this NumericRepresentationValue value, string targetUnitCode)
+        public static int AsConvertedInt(this NumericRepresentationValue value, string targetUnitCode)
         {
-            return (long)value.AsConvertedDouble(targetUnitCode);
+            return (int)value.AsConvertedDouble(targetUnitCode);
         }
     }
 }

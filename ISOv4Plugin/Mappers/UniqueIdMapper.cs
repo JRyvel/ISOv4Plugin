@@ -46,7 +46,7 @@ namespace AgGateway.ADAPT.ISOv4Plugin.Mappers
                     if (linkGroup == null)
                     {
                         linkGroup = new ISOLinkGroup() { LinkGroupType = ISOEnumerations.ISOLinkGroupType.UUID, LinkGroupDesignator = "UUIDs", Links = new List<ISOLink>() };
-                        linkGroup.LinkGroupId = BaseMapper.GenerateID(0, "LGP", _lgpID++); //Special ID invocation here due to class relationships
+                        linkGroup.LinkGroupId = BaseMapper.GenerateId(0, "LGP", _lgpID++); //Special ID invocation here due to class relationships
                         LinkList.LinkGroups.Add(linkGroup);
                     }
                 }
@@ -83,28 +83,33 @@ namespace AgGateway.ADAPT.ISOv4Plugin.Mappers
             List<UniqueId> uniqueIDs = new List<UniqueId>();
 
             //1. Add any matching link in the LinkList.xml
-            foreach (ISOLinkGroup isoLinkGroup in LinkList.LinkGroups)
+            if (LinkList != null)
             {
-                ISOLink link = isoLinkGroup.Links.FirstOrDefault(l => l.ObjectIdRef == isoObjectIdRef);
-                if (link != null)
+                foreach (ISOLinkGroup isoLinkGroup in LinkList.LinkGroups)
                 {
-                    UniqueId adaptID = new UniqueId();
-                    adaptID.Id = link.LinkValue;
+                    ISOLink link = isoLinkGroup.Links.FirstOrDefault(l => l.ObjectIdRef == isoObjectIdRef);
+                    if (link != null)
+                    {
+                        UniqueId adaptID = new UniqueId();
+                        adaptID.Id = link.LinkValue;
 
-                    if (isoLinkGroup.LinkGroupType == ISOEnumerations.ISOLinkGroupType.UUID)
-                    {
-                        adaptID.IdType = IdTypeEnum.UUID;
+                        if (isoLinkGroup.LinkGroupType == ISOEnumerations.ISOLinkGroupType.UUID)
+                        {
+                            adaptID.IdType = IdTypeEnum.UUID;
+                        }
+                        else if (isoLinkGroup.LinkGroupType == ISOEnumerations.ISOLinkGroupType.ManufacturerProprietary)
+                        {
+                            adaptID.SourceType = IdSourceTypeEnum.GLN;
+                            adaptID.Source = isoLinkGroup.ManufacturerGLN;
+                        }
+                        uniqueIDs.Add(adaptID);
                     }
-                    else if (isoLinkGroup.LinkGroupType == ISOEnumerations.ISOLinkGroupType.ManufacturerProprietary)
-                    {
-                        adaptID.SourceType = IdSourceTypeEnum.GLN;
-                        adaptID.Source = isoLinkGroup.ManufacturerGLN;
-                    }
-                    uniqueIDs.Add(adaptID);
                 }
             }
 
             //2. Add a link for the current ISOXML import
+            //This temporary reference serves as a mapping back to the imported file
+            //The values are omitted from the LinkList.xml during any export.
             uniqueIDs.Add(ImportCurrentISOLink(isoObjectIdRef));
 
             return uniqueIDs;

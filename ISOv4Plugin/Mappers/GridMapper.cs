@@ -61,14 +61,14 @@ namespace AgGateway.ADAPT.ISOv4Plugin.Mappers
             }
 
             FileInfo info = new FileInfo(Path.Combine(this.TaskDataPath, Path.ChangeExtension(grid.Filename,"bin")));
-            grid.Filelength = info.Length;
+            grid.Filelength = (uint)info.Length;
 
             grid.GridMinimumNorthPosition = Convert.ToDecimal(GetOriginY(adaptRx));
             grid.GridMinimumEastPosition = Convert.ToDecimal(GetOriginX(adaptRx));
             grid.GridCellNorthSize = GetCellHeight(adaptRx);
             grid.GridCellEastSize = GetCellWidth(adaptRx);
-            grid.GridMaximumColumn = adaptRx.ColumnCount;
-            grid.GridMaximumRow = adaptRx.RowCount;
+            grid.GridMaximumColumn = (uint)adaptRx.ColumnCount;
+            grid.GridMaximumRow = (uint)adaptRx.RowCount;
             return grid;
         }
 
@@ -291,7 +291,7 @@ namespace AgGateway.ADAPT.ISOv4Plugin.Mappers
                 {
                     if (!string.IsNullOrEmpty(pdv.ProductIdRef))
                     {
-                        int? productID = TaskDataMapper.ADAPTIdMap.FindByISOId(pdv.ProductIdRef);
+                        int? productID = TaskDataMapper.InstanceIDMap.GetADAPTID(pdv.ProductIdRef);
                         if (productID.HasValue)
                         {
                             rate.RxRate.Add(PrescriptionMapper.ImportRate(productID.Value, pdv.ProcessDataValue, prescription));

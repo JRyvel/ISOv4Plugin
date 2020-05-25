@@ -1,13 +1,12 @@
-﻿/*
+/*
  * ISO standards can be purchased through the ANSI webstore at https://webstore.ansi.org
 */
 
-using AgGateway.ADAPT.ISOv4Plugin.ISOModels;
 using System;
-using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Xml;
-using System.Xml.XPath;
 
 namespace AgGateway.ADAPT.ISOv4Plugin.ExtensionMethods
 {
@@ -22,15 +21,20 @@ namespace AgGateway.ADAPT.ISOv4Plugin.ExtensionMethods
                     return null;
                 var xmlDoc = new XmlDocument();
 
-                string filePath = Path.ChangeExtension(Path.Combine(baseFolder, fileName), ".xml");
-                try
-                {
-                    xmlDoc.Load(filePath);
+                string xmlName = string.Concat(fileName, ".xml");
+                string file = baseFolder.GetDirectoryFiles(xmlName, SearchOption.AllDirectories).FirstOrDefault();
 
-                    return xmlDoc.SelectNodes("XFC/*");
+                if (file != null)
+                {
+                    try
+                    {
+                        xmlDoc.Load(file);
+
+                        return xmlDoc.SelectNodes("XFC/*");
+                    }
+                    catch (XmlException) { }
+                    catch (IOException) { }
                 }
-                catch (XmlException) { }
-                catch (IOException) { }
             }
             return null;
         }
@@ -150,7 +154,7 @@ namespace AgGateway.ADAPT.ISOv4Plugin.ExtensionMethods
         {
             string value = GetXmlNodeValue(xmlNode, xPath);
             double outValue;
-            if (double.TryParse(value, out outValue))
+            if (double.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out outValue))
             {
                 return outValue;
             }
@@ -177,7 +181,7 @@ namespace AgGateway.ADAPT.ISOv4Plugin.ExtensionMethods
         {
             string value = GetXmlNodeValue(xmlNode, xPath);
             decimal outValue;
-            if (decimal.TryParse(value, out outValue))
+            if (decimal.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out outValue))
             {
                 return outValue;
             }
@@ -222,7 +226,19 @@ namespace AgGateway.ADAPT.ISOv4Plugin.ExtensionMethods
             if (!attributeValue.HasValue)
                 return;
 
-            writer.WriteAttributeString(attributeName, attributeValue.Value.ToString());
+            if (typeof(T) == typeof(decimal))
+            {
+                decimal helper = (decimal)(object)(attributeValue.Value);
+                writer.WriteAttributeString(attributeName, helper.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            }
+            else if (typeof(T) == typeof(double))
+            {
+                double helper = (double)(object)(attributeValue.Value);
+                writer.WriteAttributeString(attributeName, helper.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            }
+            else {
+                writer.WriteAttributeString(attributeName, attributeValue.Value.ToString());
+            }
         }
     }
 }

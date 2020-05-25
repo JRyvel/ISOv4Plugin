@@ -7,6 +7,7 @@ using AgGateway.ADAPT.ISOv4Plugin.ExtensionMethods;
 using System.Collections.Generic;
 using AgGateway.ADAPT.ISOv4Plugin.ObjectModel;
 using System;
+using AgGateway.ADAPT.ApplicationDataModel.ADM;
 
 namespace AgGateway.ADAPT.ISOv4Plugin.ISOModels
 {
@@ -45,6 +46,7 @@ namespace AgGateway.ADAPT.ISOv4Plugin.ISOModels
             xmlBuilder.WriteXmlAttribute("E", DeviceSerialNumber);
             xmlBuilder.WriteXmlAttribute("F", DeviceStructureLabel);
             xmlBuilder.WriteXmlAttribute("G", DeviceLocalizationLabel);
+            base.WriteXML(xmlBuilder);
             foreach (ISODeviceElement item in DeviceElements) { item.WriteXML(xmlBuilder); }
             foreach (ISODeviceProcessData item in DeviceProcessDatas) { item.WriteXML(xmlBuilder); }
             foreach (ISODeviceProperty item in DeviceProperties) { item.WriteXML(xmlBuilder); }
@@ -102,7 +104,7 @@ namespace AgGateway.ADAPT.ISOv4Plugin.ISOModels
             return items;
         }
 
-        public override List<Error> Validate(List<Error> errors)
+        public override List<IError> Validate(List<IError> errors)
         {
             RequireString(this, x => x.DeviceId, 14, errors, "A");
             ValidateString(this, x => x.DeviceDesignator, 32, errors, "B");

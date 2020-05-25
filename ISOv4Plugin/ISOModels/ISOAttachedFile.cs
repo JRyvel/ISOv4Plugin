@@ -2,6 +2,7 @@
  * ISO standards can be purchased through the ANSI webstore at https://webstore.ansi.org
 */
 
+using AgGateway.ADAPT.ApplicationDataModel.ADM;
 using AgGateway.ADAPT.ISOv4Plugin.ExtensionMethods;
 using AgGateway.ADAPT.ISOv4Plugin.ISOEnumerations;
 using AgGateway.ADAPT.ISOv4Plugin.ObjectModel;
@@ -32,6 +33,7 @@ namespace AgGateway.ADAPT.ISOv4Plugin.ISOModels
             xmlBuilder.WriteXmlAttribute<byte>("D", FileType);
             xmlBuilder.WriteXmlAttribute("E", FileVersion);
             xmlBuilder.WriteXmlAttribute<uint>("F", FileLength);
+            base.WriteXML(xmlBuilder);
             xmlBuilder.WriteEndElement();
 
             return xmlBuilder;
@@ -62,7 +64,7 @@ namespace AgGateway.ADAPT.ISOv4Plugin.ISOModels
             return items;
         }
 
-        public override List<Error> Validate(List<Error> errors)
+        public override List<IError> Validate(List<IError> errors)
         {
             RequireString(this, x => x.FilenamewithExtension, 12, errors, "A");
             ValidateEnumerationValue(typeof(ISOAttachedFilePreserve), PreserveInt, errors);

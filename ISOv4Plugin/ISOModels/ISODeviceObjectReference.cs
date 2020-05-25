@@ -6,6 +6,7 @@ using System.Xml;
 using AgGateway.ADAPT.ISOv4Plugin.ExtensionMethods;
 using System.Collections.Generic;
 using AgGateway.ADAPT.ISOv4Plugin.ObjectModel;
+using AgGateway.ADAPT.ApplicationDataModel.ADM;
 
 namespace AgGateway.ADAPT.ISOv4Plugin.ISOModels
 {
@@ -18,6 +19,7 @@ namespace AgGateway.ADAPT.ISOv4Plugin.ISOModels
         {
             xmlBuilder.WriteStartElement("DOR");
             xmlBuilder.WriteXmlAttribute<uint>("A", DeviceObjectId );
+            base.WriteXML(xmlBuilder);
             xmlBuilder.WriteEndElement();
             return xmlBuilder;
         }
@@ -39,7 +41,7 @@ namespace AgGateway.ADAPT.ISOv4Plugin.ISOModels
             return items;
         }
 
-        public override List<Error> Validate(List<Error> errors)
+        public override List<IError> Validate(List<IError> errors)
         {
             RequireRange<ISODeviceObjectReference, uint>(this, x => x.DeviceObjectId, 1, 65534, errors, "A");
             return errors;

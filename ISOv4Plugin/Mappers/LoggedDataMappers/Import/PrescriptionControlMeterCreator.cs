@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using AgGateway.ADAPT.ApplicationDataModel.LoggedData;
@@ -32,7 +32,7 @@ namespace AgGateway.ADAPT.ISOv4Plugin.Mappers
             return new List<ISOEnumeratedMeter> { meter };
         }
 
-        public EnumeratedValue GetValueForMeter(SpatialValue value, EnumeratedWorkingData meter)
+        public EnumeratedValue GetValueForMeter(SpatialValue value, ISOEnumeratedMeter meter)
         {
             if (value == null)
                 return null;
@@ -60,7 +60,7 @@ namespace AgGateway.ADAPT.ISOv4Plugin.Mappers
 
         public UInt32 GetMetersValue(List<WorkingData> meters, SpatialRecord spatialRecord)
         {
-            var meter = (ISOEnumeratedMeter) meters.FirstOrDefault();
+            var meter = meters.FirstOrDefault();
             var value = (EnumeratedValue)spatialRecord.GetMeterValue(meter);
 
             if (value.Value.Code == DefinedTypeEnumerationInstanceList.dtiPrscMasterManualOff.ToModelEnumMember().Code)

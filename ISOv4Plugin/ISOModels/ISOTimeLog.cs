@@ -11,6 +11,7 @@ using System;
 using System.Linq;
 using AgGateway.ADAPT.ISOv4Plugin.Representation;
 using System.Xml.Linq;
+using AgGateway.ADAPT.ApplicationDataModel.ADM;
 
 namespace AgGateway.ADAPT.ISOv4Plugin.ISOModels
 {
@@ -52,8 +53,9 @@ namespace AgGateway.ADAPT.ISOv4Plugin.ISOModels
 
         public ISOTime GetTimeElement(string dataPath)
         {
-            string filePath = Path.Combine(dataPath, string.Concat(Filename, ".xml"));
-            if (File.Exists(filePath))
+            string xmlName = string.Concat(Filename, ".xml");
+            string filePath = dataPath.GetDirectoryFiles(xmlName, SearchOption.TopDirectoryOnly).FirstOrDefault();
+            if (filePath != null)
             {
                 XmlDocument document = new XmlDocument();
                 document.Load(filePath);
@@ -67,7 +69,7 @@ namespace AgGateway.ADAPT.ISOv4Plugin.ISOModels
             }
         }
 
-        public override List<Error> Validate(List<Error> errors)
+        public override List<IError> Validate(List<IError> errors)
         {
             RequireString(this, x => x.Filename, 8, errors, "A");
             if (Filelength.HasValue) ValidateRange<ISOTimeLog, uint>(this, x => x.Filelength.Value, 0, uint.MaxValue - 2, errors, "B");

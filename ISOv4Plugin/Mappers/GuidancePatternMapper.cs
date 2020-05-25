@@ -1,4 +1,4 @@
-﻿/*
+/*
  * ISO standards can be purchased through the ANSI webstore at https://webstore.ansi.org
 */
 
@@ -60,8 +60,14 @@ namespace AgGateway.ADAPT.ISOv4Plugin.Mappers
             gpn.Extension = ExportExtension(adaptGuidancePattern.Extension);
             gpn.Heading = ExportHeading(adaptGuidancePattern);
             gpn.GNSSMethod = ExportGNSSMethod(adaptGuidancePattern.GpsSource.SourceType);
-            gpn.HorizontalAccuracy = (decimal)adaptGuidancePattern.GpsSource.HorizontalAccuracy.AsConvertedDouble("m");
-            gpn.VerticalAccuracy = (decimal)adaptGuidancePattern.GpsSource.VerticalAccuracy.AsConvertedDouble("m"); 
+            if (adaptGuidancePattern.GpsSource.HorizontalAccuracy != null)
+            {
+                gpn.HorizontalAccuracy = (decimal)adaptGuidancePattern.GpsSource.HorizontalAccuracy.AsConvertedDouble("m").Value;
+            }
+            if (adaptGuidancePattern.GpsSource.VerticalAccuracy != null)
+            {
+                gpn.VerticalAccuracy = (decimal)adaptGuidancePattern.GpsSource.VerticalAccuracy.AsConvertedDouble("m").Value;
+            }
             gpn.OriginalSRID = adaptGuidancePattern.OriginalEpsgCode;
             gpn.NumberOfSwathsLeft = (uint?)adaptGuidancePattern.NumbersOfSwathsLeft;
             gpn.NumberOfSwathsRight = (uint?)adaptGuidancePattern.NumbersOfSwathsRight;
@@ -92,18 +98,20 @@ namespace AgGateway.ADAPT.ISOv4Plugin.Mappers
                     PivotGuidancePattern pivot = adaptGuidancePattern as PivotGuidancePattern;
                     LineString pivotLine = new LineString { Points = new List<Point>() };
                     pivotLine.Points.Add(pivot.Center);
-
-                    if (pivot.StartPoint != null)
+                    if (pivot.DefinitionMethod == PivotGuidanceDefinitionEnum.PivotGuidancePatternStartEndCenter &&
+                        pivot.StartPoint != null &&
+                        pivot.EndPoint != null)
                     {
                         pivotLine.Points.Add(pivot.StartPoint);
-                        if (pivot.EndPoint != null)
-                        {
-                            pivotLine.Points.Add(pivot.EndPoint);
-                        }
+                        pivotLine.Points.Add(pivot.EndPoint);
+                    }
+                    else if (pivot.DefinitionMethod == PivotGuidanceDefinitionEnum.PivotGuidancePatternCenterRadius &&
+                             pivot.Radius != null)
+                    {
+                        gpn.Radius = (uint)pivot.Radius.AsConvertedInt("mm").Value;
+                        gpn.GuidancePatternOptions = ISOGuidancePatternOption.FullCircle;
                     }
                     gpn.LineString = lineStringMapper.ExportLineString(pivotLine, ISOLineStringType.GuidancePattern);
-                    //gpn.Radius = ?  //Not implemented
-                    //gpn.GuidancePatternOptions = ? //Not implemented
                     break;
                 case GuidancePatternTypeEnum.Spiral:
                     Spiral spiral = adaptGuidancePattern as Spiral;
@@ -260,22 +268,46 @@ namespace AgGateway.ADAPT.ISOv4Plugin.Mappers
         public GuidancePattern ImportGuidancePattern(ISOGuidancePattern isoGuidancePattern)
         {
             GuidancePattern pattern = null;
+            LineStringMapper lineStringMapper = new LineStringMapper(TaskDataMapper);
+            PointMapper pointMapper = new PointMapper(TaskDataMapper);
             switch (isoGuidancePattern.GuidancePatternType)
             {
                 case ISOGuidancePatternType.AB:
                     pattern = new AbLine();
+                    AbLine abLine = pattern as AbLine;
+                    abLine.A = pointMapper.ImportPoint(isoGuidancePattern.LineString.Points.First());
+                    abLine.B = pointMapper.ImportPoint(isoGuidancePattern.LineString.Points.Last());
                     break;
                 case ISOGuidancePatternType.APlus:
                     pattern = new APlus();
+                    APlus aPlus = pattern as APlus;
+                    aPlus.Point = pointMapper.ImportPoint(isoGuidancePattern.LineString.Points.First());
                     break;
                 case ISOGuidancePatternType.Curve:
                     pattern = new AbCurve();
+                    AbCurve abCurve = pattern as AbCurve;
+                    abCurve.Shape = new List<LineString>() { lineStringMapper.ImportLineString(isoGuidancePattern.LineString) }; //As with export, we only have 1 linestring.
                     break;
                 case ISOGuidancePatternType.Pivot:
                     pattern = new PivotGuidancePattern();
+                    PivotGuidancePattern pivot = pattern as PivotGuidancePattern;
+                    pivot.Center = pointMapper.ImportPoint(isoGuidancePattern.LineString.Points.First());
+                    pivot.Radius = isoGuidancePattern.Radius.HasValue ? ((int)isoGuidancePattern.Radius).AsNumericRepresentationValue("mm") : null;
+                    if (isoGuidancePattern.LineString.Points.Count == 1)
+                    {
+                        pivot.DefinitionMethod = PivotGuidanceDefinitionEnum.PivotGuidancePatternCenterRadius;
+                    }
+                    else if (isoGuidancePattern.LineString.Points.Count == 3)
+                    {
+                        pivot.DefinitionMethod = PivotGuidanceDefinitionEnum.PivotGuidancePatternStartEndCenter;
+                        pivot.StartPoint = pointMapper.ImportPoint(isoGuidancePattern.LineString.Points[1]);
+                        pivot.EndPoint = pointMapper.ImportPoint(isoGuidancePattern.LineString.Points[2]);
+                    }
                     break;
                 case ISOGuidancePatternType.Spiral:
                     pattern = new Spiral();
+                    Spiral spiral = pattern as Spiral;
+                    spiral.Shape = lineStringMapper.ImportLineString(isoGuidancePattern.LineString);
                     break;
             }
 

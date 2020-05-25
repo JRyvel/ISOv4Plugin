@@ -2,6 +2,7 @@
  * ISO standards can be purchased through the ANSI webstore at https://webstore.ansi.org
 */
 
+using AgGateway.ADAPT.ApplicationDataModel.ADM;
 using AgGateway.ADAPT.ISOv4Plugin.ExtensionMethods;
 using AgGateway.ADAPT.ISOv4Plugin.ISOEnumerations;
 using AgGateway.ADAPT.ISOv4Plugin.ObjectModel;
@@ -51,12 +52,16 @@ namespace AgGateway.ADAPT.ISOv4Plugin.ISOModels
             xmlBuilder.WriteXmlAttribute("A", GuidancePatternId);
             xmlBuilder.WriteXmlAttribute("B", GuidancePatternDesignator);
             xmlBuilder.WriteXmlAttribute("C", ((int)GuidancePatternType).ToString());
-            xmlBuilder.WriteXmlAttribute<ISOGuidancePatternOption>("D", GuidancePatternOptions);
-            xmlBuilder.WriteXmlAttribute<ISOGuidancePatternPropagationDirection>("E", PropagationDirection);
-            xmlBuilder.WriteXmlAttribute<ISOGuidancePatternExtension>("F", Extension);
+            //190503 MSp xmlBuilder.WriteXmlAttribute<ISOGuidancePatternOption>("D", GuidancePatternOptions);
+            if (GuidancePatternOptions.HasValue) xmlBuilder.WriteXmlAttribute("D", ((int)GuidancePatternOptions).ToString());    //190503 MSp
+            //190503 MSp xmlBuilder.WriteXmlAttribute<ISOGuidancePatternPropagationDirection>("E", PropagationDirection);   // Gets serialized as E="BothDirections"
+            if (PropagationDirection.HasValue) xmlBuilder.WriteXmlAttribute("E", ((int)PropagationDirection).ToString());  //190503 MSp
+            //190503 MSp xmlBuilder.WriteXmlAttribute<ISOGuidancePatternExtension>("F", Extension);
+            if (Extension.HasValue) xmlBuilder.WriteXmlAttribute("F", ((int)Extension).ToString()); //190503 MSp
             xmlBuilder.WriteXmlAttribute("G", Heading);
             xmlBuilder.WriteXmlAttribute("H", Radius);
-            xmlBuilder.WriteXmlAttribute<ISOGuidancePatternGNSSMethod>("I", GNSSMethod);
+            //190503 MSp xmlBuilder.WriteXmlAttribute<ISOGuidancePatternGNSSMethod>("I", GNSSMethod);
+            if (GNSSMethod.HasValue) xmlBuilder.WriteXmlAttribute("I", ((int)GNSSMethod).ToString());   //190503 MSp
             xmlBuilder.WriteXmlAttribute("J", HorizontalAccuracy);
             xmlBuilder.WriteXmlAttribute("K", VerticalAccuracy);
             xmlBuilder.WriteXmlAttribute("L", BaseStationRef);
@@ -119,7 +124,7 @@ namespace AgGateway.ADAPT.ISOv4Plugin.ISOModels
             return items;
         }
 
-        public override List<Error> Validate(List<Error> errors)
+        public override List<IError> Validate(List<IError> errors)
         {
             RequireString(this, x => x.GuidancePatternId, 14, errors, "A");
             ValidateString(this, x => x.GuidancePatternDesignator, 32, errors, "B");

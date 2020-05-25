@@ -1,4 +1,4 @@
-﻿/*
+/*
  * ISO standards can be purchased through the ANSI webstore at https://webstore.ansi.org
 */
 
@@ -62,6 +62,7 @@ namespace AgGateway.ADAPT.ISOv4Plugin.Mappers
             //ID
             string id = operation.Id.FindIsoId() ?? GenerateId(5);
             isoTimeLog.Filename = id;
+            isoTimeLog.TimeLogType = 1; // TimeLogType TLG.C is a required attribute. Currently only the value "1" is defined.
             ExportIDs(operation.Id, id);
 
             List<DeviceElementUse> deviceElementUses = operation.GetAllSections();
@@ -146,8 +147,9 @@ namespace AgGateway.ADAPT.ISOv4Plugin.Mappers
         }
 
         private class BinaryWriter
-        {
+        {   // ATTENTION: CoordinateMultiplier and ZMultiplier also exist in Import\SpatialRecordMapper.cs!
             private const double CoordinateMultiplier = 0.0000001;
+            private const double ZMultiplier = 0.001;   // In ISO the PositionUp value is specified in mm.
             private readonly DateTime _januaryFirst1980 = new DateTime(1980, 1, 1);
 
             private readonly IEnumeratedValueMapper _enumeratedValueMapper;
@@ -205,7 +207,7 @@ namespace AgGateway.ADAPT.ISOv4Plugin.Mappers
                     {
                         north = (Int32)(location.Y / CoordinateMultiplier);
                         east = (Int32)(location.X / CoordinateMultiplier);
-                        up = (Int32)(location.Z.GetValueOrDefault());
+                        up = (Int32)(location.Z.GetValueOrDefault() / ZMultiplier);
                     }
                 }
 
@@ -230,7 +232,6 @@ namespace AgGateway.ADAPT.ISOv4Plugin.Mappers
                 }
             }
 
-            private readonly Dictionary<int, uint> _previousDlvs = new Dictionary<int, uint>();
             private Dictionary<int, uint> GetMeterValues(SpatialRecord spatialRecord, List<WorkingData> workingDatas)
             {
                 var dlvsToWrite = new Dictionary<int, uint>();
@@ -258,16 +259,12 @@ namespace AgGateway.ADAPT.ISOv4Plugin.Mappers
                         }
                     }
 
-                    if (value == null) { continue; }
-
-                    if (_previousDlvs.ContainsKey(order) && _previousDlvs[order] != value)
+                    if (value == null)
                     {
-                        _previousDlvs[order] = value.Value;
-                        dlvsToWrite.Add(order, value.Value);
+                        continue;
                     }
-                    else if (!_previousDlvs.ContainsKey(order))
+                    else
                     {
-                        _previousDlvs.Add(order, value.Value);
                         dlvsToWrite.Add(order, value.Value);
                     }
                 }
@@ -299,11 +296,19 @@ namespace AgGateway.ADAPT.ISOv4Plugin.Mappers
         {
             WorkingDataMapper workingDataMapper = new WorkingDataMapper(new EnumeratedMeterFactory(), TaskDataMapper);
             SectionMapper sectionMapper = new SectionMapper(workingDataMapper, TaskDataMapper);
-            SpatialRecordMapper spatialMapper = new SpatialRecordMapper(new RepresentationValueInterpolator(), sectionMapper, workingDataMapper);
+            SpatialRecordMapper spatialMapper = new SpatialRecordMapper(new RepresentationValueInterpolator(), sectionMapper, workingDataMapper, TaskDataMapper);
             IEnumerable<ISOSpatialRow> isoRecords = ReadTimeLog(isoTimeLog, this.TaskDataPath);
             if (isoRecords != null)
             {
-                isoRecords = isoRecords.ToList(); //Avoids multiple reads
+                try
+                {
+                    isoRecords = isoRecords.ToList(); //Avoids multiple reads
+                }
+                catch (Exception ex)
+                {
+                    TaskDataMapper.AddError($"Timelog file {isoTimeLog.Filename} is invalid.  Skipping.", ex.Message, null, ex.StackTrace);
+                    return null;
+                }
                 ISOTime time = isoTimeLog.GetTimeElement(this.TaskDataPath);
 
                 //Identify unique devices represented in this TimeLog data
@@ -330,56 +335,81 @@ namespace AgGateway.ADAPT.ISOv4Plugin.Mappers
                 {
                     OperationData operationData = new OperationData();
 
+                    //Determine products
+                    Dictionary<string, List<ISOProductAllocation>> productAllocations = GetProductAllocationsByDeviceElement(loggedTask, dvc);
+                    List<int> productIDs = GetDistinctProductIDs(TaskDataMapper, productAllocations);
+
                     //This line will necessarily invoke a spatial read in order to find 
                     //1)The correct number of CondensedWorkState working datas to create 
                     //2)Any Widths and Offsets stored in the spatial data
-                    IEnumerable<DeviceElementUse> sections = sectionMapper.Map(time, isoRecords, operationData.Id.ReferenceId, loggedDeviceElementsByDevice[dvc]);
+                    IEnumerable<DeviceElementUse> sections = sectionMapper.Map(time,
+                                                                               isoRecords,
+                                                                               operationData.Id.ReferenceId,
+                                                                               loggedDeviceElementsByDevice[dvc],
+                                                                               productAllocations);
 
                     var workingDatas = sections != null ? sections.SelectMany(x => x.GetWorkingDatas()).ToList() : new List<WorkingData>();
-                    var sectionsSimple = sectionMapper.ConvertToBaseTypes(sections.ToList());
 
-                    operationData.GetSpatialRecords = () => spatialMapper.Map(isoRecords, workingDatas);
+                    operationData.GetSpatialRecords = () => spatialMapper.Map(isoRecords, workingDatas, productAllocations);
                     operationData.MaxDepth = sections.Count() > 0 ? sections.Select(s => s.Depth).Max() : 0;
-                    operationData.GetDeviceElementUses = x => x == 0 ? sectionsSimple : new List<DeviceElementUse>();
+                    operationData.GetDeviceElementUses = x => sectionMapper.ConvertToBaseTypes(sections.Where(s => s.Depth == x).ToList());
                     operationData.PrescriptionId = prescriptionID;
                     operationData.OperationType = GetOperationTypeFromLoggingDevices(time);
-                    operationData.ProductId = GetProductIDForOperationData(loggedTask, dvc);
+                    operationData.ProductIds = productIDs; 
                     operationData.SpatialRecordCount = isoRecords.Count();
                     operationDatas.Add(operationData);
                 }
+
+                //Set the CoincidentOperationDataIds property identifying Operation Datas from the same TimeLog.
+                operationDatas.ForEach(o => o.CoincidentOperationDataIds = operationDatas.Where(o2 => o2.Id.ReferenceId != o.Id.ReferenceId).Select(o3 => o3.Id.ReferenceId).ToList());
 
                 return operationDatas;
             }
             return null;
         }
 
-        private int? GetProductIDForOperationData(ISOTask loggedTask, ISODevice dvc)
+        internal static List<int> GetDistinctProductIDs(TaskDataMapper taskDataMapper, Dictionary<string, List<ISOProductAllocation>> productAllocations)
         {
-            if (loggedTask.ProductAllocations.Count == 1 || loggedTask.ProductAllocations.Select(p => p.ProductIdRef).Distinct().Count() == 1)
+            HashSet<int> productIDs = new HashSet<int>();
+            foreach (string detID in productAllocations.Keys)
             {
-                //There is only one product in the data
-                return TaskDataMapper.InstanceIDMap.GetADAPTID(loggedTask.ProductAllocations.First().ProductIdRef);
-            }
-            else
-            {
-                HashSet<string> productRefsForThisDevice = new HashSet<string>();
-                foreach (ISODeviceElement det in dvc.DeviceElements)
+                foreach (ISOProductAllocation pan in productAllocations[detID])
                 {
-                    foreach (ISOProductAllocation detMappedPan in loggedTask.ProductAllocations.Where(p => !string.IsNullOrEmpty(p.DeviceElementIdRef)))
+                    int? id = taskDataMapper.InstanceIDMap.GetADAPTID(pan.ProductIdRef);
+                    if (id.HasValue)
                     {
-                        productRefsForThisDevice.Add(detMappedPan.ProductIdRef);
+                        productIDs.Add(id.Value);
                     }
                 }
-                if (productRefsForThisDevice.Count == 1)
+            }
+            return productIDs.ToList();
+        }
+
+        private Dictionary<string, List<ISOProductAllocation>> GetProductAllocationsByDeviceElement(ISOTask loggedTask, ISODevice dvc)
+        {
+            Dictionary<string, List<ISOProductAllocation>> output = new Dictionary<string, List<ISOProductAllocation>>();
+            foreach (ISOProductAllocation pan in loggedTask.ProductAllocations.Where(p => !string.IsNullOrEmpty(p.DeviceElementIdRef)))
+            {
+                if (dvc.DeviceElements.Select(d => d.DeviceElementId).Contains(pan.DeviceElementIdRef)) //Filter PANs by this DVC
                 {
-                    //There is only one product represented on this device
-                    return TaskDataMapper.InstanceIDMap.GetADAPTID(productRefsForThisDevice.Single());
+                    ISODeviceElement deviceElement = dvc.DeviceElements.First(d => d.DeviceElementId == pan.DeviceElementIdRef);
+                    AddProductAllocationsForDeviceElement(output, pan, deviceElement);
                 }
-                else
-                {
-                    //Unable to reconcile a single product
-                    return null;
-                }
+            }
+            return output;
+        }
+
+        private void AddProductAllocationsForDeviceElement(Dictionary<string, List<ISOProductAllocation>> productAllocations, ISOProductAllocation pan, ISODeviceElement deviceElement)
+        {
+            if (!productAllocations.ContainsKey(deviceElement.DeviceElementId))
+            {
+                productAllocations.Add(deviceElement.DeviceElementId, new List<ISOProductAllocation>());
+            }
+            productAllocations[deviceElement.DeviceElementId].Add(pan);
+
+            foreach (ISODeviceElement child in deviceElement.ChildDeviceElements)
+            {
+                AddProductAllocationsForDeviceElement(productAllocations, pan, child);
             }
         }
 
@@ -418,9 +448,9 @@ namespace AgGateway.ADAPT.ISOv4Plugin.Mappers
         private IEnumerable<ISOSpatialRow> ReadTimeLog(ISOTimeLog timeLog, string dataPath)
         {
             ISOTime templateTime = timeLog.GetTimeElement(dataPath);
-            string filePath = Path.Combine(dataPath, string.Concat(timeLog.Filename, ".bin"));
-
-            if (templateTime != null && File.Exists(filePath))
+            string binName = string.Concat(timeLog.Filename, ".bin");
+            string filePath = dataPath.GetDirectoryFiles(binName, SearchOption.TopDirectoryOnly).FirstOrDefault();
+            if (templateTime != null && filePath != null)
             {
                 BinaryReader reader = new BinaryReader();
                 return reader.Read(filePath, templateTime);
@@ -508,15 +538,52 @@ namespace AgGateway.ADAPT.ISOv4Plugin.Mappers
                             }
                         }
 
+                        //Some datasets end here
+                        if (binaryReader.BaseStream.Position >= binaryReader.BaseStream.Length)
+                        {
+                            break;
+                        }
+
                         var numberOfDLVs = binaryReader.ReadByte();
+                        //Some datasets end here
+                        if (binaryReader.BaseStream.Position >= binaryReader.BaseStream.Length)
+                        {
+                            break;
+                        }
+
+                        //If the reported number of values does not fit into the stream, correct the numberOfDLVs
+                        if (numberOfDLVs > 0)
+                        {
+                            var endPosition = binaryReader.BaseStream.Position + 5 * numberOfDLVs;
+                            if (endPosition > binaryReader.BaseStream.Length)
+                            {
+                                numberOfDLVs = (byte)Math.Floor((endPosition - binaryReader.BaseStream.Length) / 5d);
+                            }
+                        }
+
                         record.SpatialValues = new List<SpatialValue>();
 
+                        //Read DLVs out of the TLG.bin
                         for (int i = 0; i < numberOfDLVs; i++)
                         {
                             var order = binaryReader.ReadByte();
                             var value = binaryReader.ReadInt32();
 
-                            record.SpatialValues.Add(CreateSpatialValue(templateTime, order, value));
+                            SpatialValue spatialValue = CreateSpatialValue(templateTime, order, value);
+                            if(spatialValue != null)
+                                record.SpatialValues.Add(spatialValue);
+                        }
+
+                        //Add any fixed values from the TLG.xml
+                        foreach (ISODataLogValue fixedValue in templateTime.DataLogValues.Where(dlv => dlv.ProcessDataValue.HasValue && !EnumeratedMeterFactory.IsCondensedMeter(dlv.ProcessDataDDI.AsInt32DDI())))
+                        {
+                            byte order = (byte)templateTime.DataLogValues.IndexOf(fixedValue);
+                            if (record.SpatialValues.Any(s => s.Id == order)) //Check to ensure the binary data didn't already write this value
+                            {
+                                //Per the spec, any fixed value in the XML applies to all rows; as such, replace what was read from the binary
+                                SpatialValue matchingValue = record.SpatialValues.Single(s => s.Id == order);
+                                matchingValue.DataLogValue = fixedValue;
+                            }
                         }
 
                         yield return record;

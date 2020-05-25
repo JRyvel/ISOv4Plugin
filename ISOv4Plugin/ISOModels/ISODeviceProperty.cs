@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using AgGateway.ADAPT.ISOv4Plugin.ISOEnumerations;
 using System;
 using AgGateway.ADAPT.ISOv4Plugin.ObjectModel;
+using AgGateway.ADAPT.ApplicationDataModel.ADM;
 
 namespace AgGateway.ADAPT.ISOv4Plugin.ISOModels
 {
@@ -28,6 +29,7 @@ namespace AgGateway.ADAPT.ISOv4Plugin.ISOModels
             xmlBuilder.WriteXmlAttribute<int>("C", Value);
             xmlBuilder.WriteXmlAttribute("D", Designator);
             xmlBuilder.WriteXmlAttribute<uint>("E", DeviceValuePresentationObjectId);
+            base.WriteXML(xmlBuilder);
             xmlBuilder.WriteEndElement();
             return xmlBuilder;
         }
@@ -54,7 +56,7 @@ namespace AgGateway.ADAPT.ISOv4Plugin.ISOModels
             return items;
         }
 
-        public override List<Error> Validate(List<Error> errors)
+        public override List<IError> Validate(List<IError> errors)
         {
             RequireRange<ISODeviceProperty, uint>(this, x => x.ObjectID, 1, 65534, errors, "A");
             RequireString(this, x => x.DDI, 4, errors, "B"); //DDI validation could be improved upon

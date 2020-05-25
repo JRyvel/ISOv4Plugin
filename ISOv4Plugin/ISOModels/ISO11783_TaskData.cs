@@ -1,4 +1,4 @@
-﻿/*
+/*
  * ISO standards can be purchased through the ANSI webstore at https://webstore.ansi.org
 */
 
@@ -10,6 +10,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.IO;
 using AgGateway.ADAPT.ISOv4Plugin.ObjectModel;
+using AgGateway.ADAPT.ApplicationDataModel.ADM;
 
 namespace AgGateway.ADAPT.ISOv4Plugin.ISOModels
 {
@@ -22,6 +23,7 @@ namespace AgGateway.ADAPT.ISOv4Plugin.ISOModels
 
         public List<ISOElement> ChildElements { get; set; }
         public ISO11783_LinkList LinkList { get; set; }
+        public string DataFolder { get; set; }
         public string FilePath { get; set; }
 
         public int VersionMajor { get; set;}
@@ -48,6 +50,7 @@ namespace AgGateway.ADAPT.ISOv4Plugin.ISOModels
             {
                 xmlBuilder.WriteAttributeString("DataTransferLanguage", DataTransferLanguage);
             }
+            base.WriteXML(xmlBuilder);
 
             if (ChildElements != null)
             {
@@ -205,16 +208,19 @@ namespace AgGateway.ADAPT.ISOv4Plugin.ISOModels
             {
                 XmlDocument linkDocument = new XmlDocument();
                 string linkPath = Path.Combine(baseFolder, linkListFile.FilenamewithExtension);
-                linkDocument.Load(linkPath);
-                XmlNode linkRoot = linkDocument.SelectSingleNode("ISO11783LinkList");
-                taskData.LinkList = ISO11783_LinkList.ReadXML(linkRoot, baseFolder);
+                if (File.Exists(linkPath))
+                {
+                    linkDocument.Load(linkPath);
+                    XmlNode linkRoot = linkDocument.SelectSingleNode("ISO11783LinkList");
+                    taskData.LinkList = ISO11783_LinkList.ReadXML(linkRoot, baseFolder);
+                }
             }
 
             return taskData;
 
         }
 
-        public override List<Error> Validate(List<Error> errors)
+        public override List<IError> Validate(List<IError> errors)
         {
             RequireRange(this, x => x.VersionMajor, 0, 4, errors);
             RequireRange(this, x => x.VersionMinor, 0, 99, errors);

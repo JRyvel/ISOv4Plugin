@@ -1,4 +1,4 @@
-﻿/*
+/*
  * ISO standards can be purchased through the ANSI webstore at https://webstore.ansi.org
 */
 
@@ -297,6 +297,14 @@ namespace AgGateway.ADAPT.ISOv4Plugin.Mappers
                                 dlv.ProcessDataValue = (int)numericValue.Value.Value;
                             }
                         }
+                        if (value.DeviceConfigurationId.HasValue)
+                        {
+                            DeviceElementConfiguration config = DataModel.Catalog.DeviceElementConfigurations.FirstOrDefault(c => c.Id.ReferenceId == value.DeviceConfigurationId.Value);
+                            if (config != null)
+                            {
+                                dlv.DeviceElementIdRef = TaskDataMapper.InstanceIDMap.GetISOID(config.DeviceElementId);
+                            }
+                        }
                         time.DataLogValues.Add(dlv);
                     }
                 }
@@ -450,23 +458,20 @@ namespace AgGateway.ADAPT.ISOv4Plugin.Mappers
             {
                 Prescription rx = PrescriptionMapper.ImportPrescription(isoPrescribedTask, workItem);
 
+                if (rx == null) return workItem;
                 //Add to the Prescription the Catalog
                 List<Prescription> prescriptions = DataModel.Catalog.Prescriptions as List<Prescription>;
-                if (prescriptions != null)
-                {
-                    prescriptions.Add(rx);
-                }
+                prescriptions?.Add(rx);
 
                 //Add A WorkItemOperation
                 WorkItemOperation operation = new WorkItemOperation();
                 operation.PrescriptionId = rx.Id.ReferenceId;
 
                 //Add the operation to the Documents and reference on the WorkItem
-                List<WorkItemOperation> operations = DataModel.Documents.WorkItemOperations as List<WorkItemOperation>;
-                if (operations != null)
-                {
-                    operations.Add(operation);
-                }
+                List<WorkItemOperation> operations =
+                    DataModel.Documents.WorkItemOperations as List<WorkItemOperation>;
+                operations?.Add(operation);
+
                 workItem.WorkItemOperationIds.Add(operation.Id.ReferenceId);
 
                 //Track any prescription IDs to map to any completed TimeLog data 
@@ -618,19 +623,6 @@ namespace AgGateway.ADAPT.ISOv4Plugin.Mappers
                 loggedData.Notes = canMapper.ImportCommentAllocations(isoLoggedTask.CommentAllocations).ToList();
             }
 
-            //Summaries
-            if (isoLoggedTask.Times.Any(t => t.HasStart && t.HasType)) //Nothing added without a Start & Type attribute
-            {
-                //An ADAPT LoggedData has exactly one summary.   This is what necessitates that ISO Task maps to LoggedData and ISO TimeLog maps to one or more Operation Data objects
-                Summary summary = ImportSummary(isoLoggedTask, loggedData); 
-                if (DataModel.Documents.Summaries == null)
-                {
-                    DataModel.Documents.Summaries = new List<Summary>();
-                }
-                (DataModel.Documents.Summaries as List<Summary>).Add(summary);
-                loggedData.SummaryId = summary.Id.ReferenceId;
-            }
-
             //Operation Data
             if (isoLoggedTask.TimeLogs.Any())
             {
@@ -660,6 +652,21 @@ namespace AgGateway.ADAPT.ISOv4Plugin.Mappers
 
                 DataModel.Catalog.EquipmentConfigurations.AddRange(equipConfigs);
             }
+
+            //Summaries
+            if (isoLoggedTask.Times.Any(t => t.HasStart && t.HasType)) //Nothing added without a Start & Type attribute
+            {
+                //An ADAPT LoggedData has exactly one summary.   This is what necessitates that ISO Task maps to LoggedData and ISO TimeLog maps to one or more Operation Data objects
+                Summary summary = ImportSummary(isoLoggedTask, loggedData);
+                if (DataModel.Documents.Summaries == null)
+                {
+                    DataModel.Documents.Summaries = new List<Summary>();
+                }
+                (DataModel.Documents.Summaries as List<Summary>).Add(summary);
+                loggedData.SummaryId = summary.Id.ReferenceId;
+            }
+
+            loggedData.ReleaseSpatialData = () => { };
 
             return loggedData;
         }
@@ -850,10 +857,29 @@ namespace AgGateway.ADAPT.ISOv4Plugin.Mappers
 
             DdiDefinition ddiDefintion = DDIs[ddi];
 
+            int? deviceConfigurationID = null;
+            int? deviceElementID = TaskDataMapper.InstanceIDMap.GetADAPTID(dlv.DeviceElementIdRef);
+            if (deviceElementID.HasValue)
+            {
+                //Since Device creation is on-demand, we need to call GetDeviceElementConfiguration here to ensure the relevant device is created if it hasn't been yet.
+                var hierarchy = TaskDataMapper?.DeviceElementHierarchies?.GetRelevantHierarchy(dlv.DeviceElementIdRef);
+                var adaptDeviceElement = DataModel?.Catalog?.DeviceElements?.FirstOrDefault(d => d?.Id?.ReferenceId == deviceElementID.Value);
+                if (hierarchy != null && adaptDeviceElement != null)
+                {
+                    DeviceElementConfiguration config = DeviceElementMapper.GetDeviceElementConfiguration(adaptDeviceElement, hierarchy, DataModel.Catalog);
+                    if (config != null)
+                    {
+                        deviceConfigurationID = config.Id.ReferenceId;
+                    }
+                }
+            }
+
             return new MeteredValue
             {
                 Value = new NumericRepresentationValue(RepresentationMapper.Map(ddi) as NumericRepresentation,
-                    unitOfMeasure, new NumericValue(unitOfMeasure, dataValue * ddiDefintion.Resolution))
+                                                       unitOfMeasure,
+                                                       new NumericValue(unitOfMeasure, dataValue * ddiDefintion.Resolution)),
+                DeviceConfigurationId = deviceConfigurationID
             };
         }
         #endregion Import Summary Data

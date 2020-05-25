@@ -1,4 +1,4 @@
-﻿/*
+/*
  * ISO standards can be purchased through the ANSI webstore at https://webstore.ansi.org
 */
 
@@ -28,6 +28,10 @@ namespace AgGateway.ADAPT.ISOv4Plugin.Mappers
 
     public class TaskDataMapper : ITaskDataMapper
     {
+        public const string TaskControllerManufacturerProperty = "TaskControllerManufacturer";
+        public const string TaskControllerVersionProperty = "TaskControllerVersion";
+        public const string DataTransferOriginProperty = "DataTransferOrigin";
+
         public TaskDataMapper(string dataPath, Properties properties)
         {
             BaseFolder = dataPath;
@@ -36,13 +40,13 @@ namespace AgGateway.ADAPT.ISOv4Plugin.Mappers
             Properties = properties;
             DeviceOperationTypes = new DeviceOperationTypes();
             InstanceIDMap = new InstanceIDMap();
-            Errors = new List<Error>();
+            Errors = new List<IError>();
         }
 
         public string BaseFolder { get; private set; }
         public Properties Properties { get; private set; }
         public InstanceIDMap InstanceIDMap { get; private set; }
-        public List<Error> Errors { get; private set; }
+        public List<IError> Errors { get; private set; }
 
         public ApplicationDataModel.ADM.ApplicationDataModel AdaptDataModel { get; private set; }
         public ISO11783_TaskData ISOTaskData { get; private set; }
@@ -92,6 +96,26 @@ namespace AgGateway.ADAPT.ISOv4Plugin.Mappers
             }
         }
 
+        GuidanceGroupMapper _guidanceGroupMapper;
+        public GuidanceGroupMapper GuidanceGroupMapper
+        {
+            get
+            {
+                if (_guidanceGroupMapper == null) _guidanceGroupMapper = new GuidanceGroupMapper(this);
+                return _guidanceGroupMapper;
+            }
+        }
+
+        GuidancePatternMapper _guidancePaddernMapper;
+        public GuidancePatternMapper GuidancePatternMapper
+        {
+            get
+            {
+                if (_guidancePaddernMapper == null) _guidancePaddernMapper = new GuidancePatternMapper(this);
+                return _guidancePaddernMapper;
+            }
+        }
+
         public void AddError(string error, string id = null, string source = null, string stackTrace = null)
         {
             Errors.Add(new Error() { Description = error, Id = id, Source = source, StackTrace = stackTrace });
@@ -101,25 +125,47 @@ namespace AgGateway.ADAPT.ISOv4Plugin.Mappers
         {
             AdaptDataModel = adm;
 
+            // Try to read some of the ISO11783 attributes from properties.
+            if (Properties == null)
+            {
+                Properties = new Properties();
+            }
+            // TaskControllerManufacturer
+            string taskControllerManufacturer = Properties.GetProperty(TaskControllerManufacturerProperty);
+            if (taskControllerManufacturer != null && taskControllerManufacturer.Length > 32) taskControllerManufacturer = taskControllerManufacturer.Substring(0, 32);
+            // TaskControllerVersion
+            string taskControllerVersion = Properties.GetProperty(TaskControllerVersionProperty);
+            if (taskControllerManufacturer != null && taskControllerManufacturer.Length > 32) taskControllerVersion = taskControllerVersion.Substring(0, 32);
+            // DataTransferOrigin
+            ISOEnumerations.ISOTaskDataTransferOrigin dataTransferOrigin;
+            string s = Properties.GetProperty(DataTransferOriginProperty);
+            if (!Enum.TryParse<ISOEnumerations.ISOTaskDataTransferOrigin>(s, out dataTransferOrigin)
+            || !Enum.IsDefined(typeof(ISOEnumerations.ISOTaskDataTransferOrigin), dataTransferOrigin))
+            {
+                dataTransferOrigin = ISOEnumerations.ISOTaskDataTransferOrigin.FMIS;    // Default
+            }
+
+
             //TaskData
             ISOTaskData = new ISO11783_TaskData();
             ISOTaskData.VersionMajor = 4;
-            ISOTaskData.VersionMinor = 0;
+            ISOTaskData.VersionMinor = 2;
             ISOTaskData.ManagementSoftwareManufacturer = "AgGateway";
             ISOTaskData.ManagementSoftwareVersion = "1.0";
-            ISOTaskData.DataTransferOrigin = ISOEnumerations.ISOTaskDataTransferOrigin.FMIS;
-            ISOTaskData.TaskControllerManufacturer = "";
-            ISOTaskData.TaskControllerVersion = "";
+            ISOTaskData.DataTransferOrigin = dataTransferOrigin;
+            ISOTaskData.TaskControllerManufacturer = taskControllerManufacturer;
+            ISOTaskData.TaskControllerVersion = taskControllerVersion;
+            ISOTaskData.XmlComments.Add($"Export created {DateTime.Now}");   //191022 MSp
 
             //LinkList
             ISOTaskData.LinkList = new ISO11783_LinkList();
             ISOTaskData.LinkList.VersionMajor = 4;
-            ISOTaskData.LinkList.VersionMinor = 0;
+            ISOTaskData.LinkList.VersionMinor = 2;
             ISOTaskData.LinkList.ManagementSoftwareManufacturer = "AgGateway";
             ISOTaskData.LinkList.ManagementSoftwareVersion = "1.0";
-            ISOTaskData.LinkList.DataTransferOrigin = ISOEnumerations.ISOTaskDataTransferOrigin.FMIS;
-            ISOTaskData.LinkList.TaskControllerManufacturer = "";
-            ISOTaskData.LinkList.TaskControllerVersion = "";
+            ISOTaskData.LinkList.DataTransferOrigin = dataTransferOrigin;
+            ISOTaskData.LinkList.TaskControllerManufacturer = taskControllerManufacturer;
+            ISOTaskData.LinkList.TaskControllerVersion = taskControllerVersion;
             ISOTaskData.LinkList.FileVersion = "";
             UniqueIDMapper = new UniqueIdMapper(ISOTaskData.LinkList);
 
@@ -262,7 +308,7 @@ namespace AgGateway.ADAPT.ISOv4Plugin.Mappers
             UniqueIDMapper = new UniqueIdMapper(ISOTaskData.LinkList);
 
             AdaptDataModel = new ApplicationDataModel.ADM.ApplicationDataModel();
-            AdaptDataModel.Catalog = new Catalog() { Description = "ISO TaskData" };
+            AdaptDataModel.Catalog = new Catalog() { Description = taskData.FilePath };
             AdaptDataModel.Documents = new Documents();
 
             //Comments 
@@ -351,7 +397,7 @@ namespace AgGateway.ADAPT.ISOv4Plugin.Mappers
             }
 
             IEnumerable<ISOTask> prescribedTasks = taskData.ChildElements.OfType<ISOTask>().Where(t => t.IsWorkItemTask);
-            IEnumerable<ISOTask> loggedTasks = taskData.ChildElements.OfType<ISOTask>().Where(t => t.IsLoggedDataTask);
+            IEnumerable<ISOTask> loggedTasks = taskData.ChildElements.OfType<ISOTask>().Where(t => t.IsLoggedDataTask || t.TimeLogs.Any());
             if (prescribedTasks.Any() || loggedTasks.Any())
             {
                 TaskMapper taskMapper = new TaskMapper(this);

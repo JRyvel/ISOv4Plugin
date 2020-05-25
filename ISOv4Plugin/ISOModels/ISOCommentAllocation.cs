@@ -6,6 +6,7 @@ using System.Xml;
 using AgGateway.ADAPT.ISOv4Plugin.ExtensionMethods;
 using System.Collections.Generic;
 using AgGateway.ADAPT.ISOv4Plugin.ObjectModel;
+using AgGateway.ADAPT.ApplicationDataModel.ADM;
 
 namespace AgGateway.ADAPT.ISOv4Plugin.ISOModels
 {
@@ -26,6 +27,7 @@ namespace AgGateway.ADAPT.ISOv4Plugin.ISOModels
             xmlBuilder.WriteXmlAttribute("A", CodedCommentIdRef);
             xmlBuilder.WriteXmlAttribute("B", CodedCommentListValueIdRef);
             xmlBuilder.WriteXmlAttribute("C", FreeCommentText);
+            base.WriteXML(xmlBuilder);
             if (AllocationStamp != null)
             {
                 AllocationStamp.WriteXML(xmlBuilder);
@@ -55,7 +57,7 @@ namespace AgGateway.ADAPT.ISOv4Plugin.ISOModels
         }
 
 
-        public override List<Error> Validate(List<Error> errors)
+        public override List<IError> Validate(List<IError> errors)
         {
             ValidateString(this, x => x.CodedCommentIdRef, 14, errors, "A");
             ValidateString(this, x => x.CodedCommentListValueIdRef, 14, errors, "B");

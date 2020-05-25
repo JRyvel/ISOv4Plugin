@@ -2,6 +2,7 @@
  * ISO standards can be purchased through the ANSI webstore at https://webstore.ansi.org
 */
 
+using AgGateway.ADAPT.ApplicationDataModel.ADM;
 using AgGateway.ADAPT.ISOv4Plugin.ExtensionMethods;
 using AgGateway.ADAPT.ISOv4Plugin.ISOEnumerations;
 using AgGateway.ADAPT.ISOv4Plugin.ObjectModel;
@@ -32,10 +33,11 @@ namespace AgGateway.ADAPT.ISOv4Plugin.ISOModels
         public override XmlWriter WriteXML(XmlWriter xmlBuilder)
         {
             xmlBuilder.WriteStartElement("ASP");
-            xmlBuilder.WriteXmlAttribute("A", Start.HasValue ? Start.Value.ToString("yyyy-MM-ddThh:mm:ss") : "");
-            xmlBuilder.WriteXmlAttribute("B", Stop.HasValue ? Stop.Value.ToString("yyyy-MM-ddThh:mm:ss") : "");
+            xmlBuilder.WriteXmlAttribute("A", Start.HasValue ? Start.Value.ToString("yyyy-MM-ddTHH:mm:ss") : "");
+            xmlBuilder.WriteXmlAttribute("B", Stop.HasValue ? Stop.Value.ToString("yyyy-MM-ddTHH:mm:ss") : "");
             xmlBuilder.WriteXmlAttribute<uint>("C", Duration);
             xmlBuilder.WriteXmlAttribute("D", ((int)Type).ToString());
+            base.WriteXML(xmlBuilder);
             foreach (ISOPosition item in Positions) { item.WriteXML(xmlBuilder); }
             xmlBuilder.WriteEndElement();
 
@@ -72,7 +74,7 @@ namespace AgGateway.ADAPT.ISOv4Plugin.ISOModels
             return items;
         }
 
-        public override List<Error> Validate(List<Error> errors)
+        public override List<IError> Validate(List<IError> errors)
         {
             Require(this, x => x.Start, errors, "A");
 

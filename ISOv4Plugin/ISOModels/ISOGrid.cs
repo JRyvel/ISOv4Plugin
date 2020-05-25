@@ -11,6 +11,7 @@ using System.Linq;
 using System;
 using AgGateway.ADAPT.ISOv4Plugin.Representation;
 using AgGateway.ADAPT.ApplicationDataModel.Prescriptions;
+using AgGateway.ADAPT.ApplicationDataModel.ADM;
 
 namespace AgGateway.ADAPT.ISOv4Plugin.ISOModels
 {
@@ -43,6 +44,7 @@ namespace AgGateway.ADAPT.ISOv4Plugin.ISOModels
             xmlBuilder.WriteXmlAttribute("H", Filelength);
             xmlBuilder.WriteXmlAttribute<byte>("I", GridType);
             xmlBuilder.WriteXmlAttribute("J", TreatmentZoneCode);
+            base.WriteXML(xmlBuilder);
             xmlBuilder.WriteEndElement();
             return xmlBuilder;
         }
@@ -77,6 +79,7 @@ namespace AgGateway.ADAPT.ISOv4Plugin.ISOModels
         {
             List<int> values = new List<int>();
             string filePath = Path.ChangeExtension(Path.Combine(dataPath, Filename), ".bin");
+            filePath = dataPath.GetDirectoryFiles(filePath, SearchOption.TopDirectoryOnly).FirstOrDefault();
             using (var fileStream = File.OpenRead(filePath))
             {
                 int treatmentZoneId;
@@ -103,6 +106,7 @@ namespace AgGateway.ADAPT.ISOv4Plugin.ISOModels
             List<List<double>> productRates = new List<List<double>>();
             Dictionary<string, ISOUnit> unitsByDDI = new Dictionary<string, ISOUnit>();
             string filePath = Path.ChangeExtension(Path.Combine(dataPath, Filename), ".bin");
+            filePath = dataPath.GetDirectoryFiles(filePath, SearchOption.TopDirectoryOnly).FirstOrDefault();
             using (var fileStream = File.OpenRead(filePath))
             {
                 var bytes = new byte[4];
@@ -148,7 +152,7 @@ namespace AgGateway.ADAPT.ISOv4Plugin.ISOModels
             return productRates;
         }
 
-        public override List<Error> Validate(List<Error> errors)
+        public override List<IError> Validate(List<IError> errors)
         {
             RequireRange(this, x => x.GridMinimumNorthPosition, -90m, 90m, errors, "A");
             RequireRange(this, x => x.GridMinimumEastPosition, -180m, 180m, errors, "B");

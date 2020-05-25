@@ -9,6 +9,7 @@ using AgGateway.ADAPT.ISOv4Plugin.ISOEnumerations;
 using System;
 using System.Linq;
 using AgGateway.ADAPT.ISOv4Plugin.ObjectModel;
+using AgGateway.ADAPT.ApplicationDataModel.ADM;
 
 namespace AgGateway.ADAPT.ISOv4Plugin.ISOModels
 {
@@ -47,6 +48,7 @@ namespace AgGateway.ADAPT.ISOv4Plugin.ISOModels
             xmlBuilder.WriteXmlAttribute("D", DeviceElementDesignator);
             xmlBuilder.WriteXmlAttribute<uint>("E", DeviceElementNumber);
             xmlBuilder.WriteXmlAttribute<uint>("F", ParentObjectId);
+            base.WriteXML(xmlBuilder);
             foreach (ISODeviceObjectReference item in DeviceObjectReferences) { item.WriteXML(xmlBuilder); }
 
             xmlBuilder.WriteEndElement();
@@ -81,7 +83,7 @@ namespace AgGateway.ADAPT.ISOv4Plugin.ISOModels
             return items;
         }
 
-        public override List<Error> Validate(List<Error> errors)
+        public override List<IError> Validate(List<IError> errors)
         {
             RequireString(this, x => x.DeviceElementId, 14, errors, "A");
             RequireRange<ISODeviceElement, uint>(this, x => x.DeviceElementObjectId, 1, 65534, errors, "B");

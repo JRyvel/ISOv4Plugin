@@ -2,6 +2,7 @@
  * ISO standards can be purchased through the ANSI webstore at https://webstore.ansi.org
 */
 
+using AgGateway.ADAPT.ApplicationDataModel.ADM;
 using AgGateway.ADAPT.ISOv4Plugin.ExtensionMethods;
 using AgGateway.ADAPT.ISOv4Plugin.ISOEnumerations;
 using AgGateway.ADAPT.ISOv4Plugin.ObjectModel;
@@ -36,6 +37,7 @@ namespace AgGateway.ADAPT.ISOv4Plugin.ISOModels
             xmlBuilder.WriteXmlAttribute("D", DataLogPGN);
             xmlBuilder.WriteXmlAttribute("E", DataLogPGNStartBit);
             xmlBuilder.WriteXmlAttribute("F", DataLogPGNStopBit);
+            base.WriteXML(xmlBuilder);
             xmlBuilder.WriteEndElement();
 
             return xmlBuilder;
@@ -67,7 +69,7 @@ namespace AgGateway.ADAPT.ISOv4Plugin.ISOModels
             return items;
         }
 
-        public override List<Error> Validate(List<Error> errors)
+        public override List<IError> Validate(List<IError> errors)
         {
             RequireString(this, x => x.ProcessDataDDI, 4, errors, "A"); //DDI validation could be improved upon
             if (ProcessDataValue.HasValue) ValidateRange(this, x => x.ProcessDataValue.Value, Int32.MinValue, Int32.MaxValue-1, errors, "B");//Value may be empty in the timelog header
